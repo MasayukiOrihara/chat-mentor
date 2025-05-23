@@ -81,27 +81,23 @@ export async function POST(req: Request) {
      * 応答処理とツール・コールの処理
      */
     const finalText: string[] = [];
-    while (true) {
-      const assistantMessageContent: any[] = [];
-      const toolCalls: ToolUseBlock[] = [];
+    const assistantMessageContent: any[] = [];
+    const toolCalls: ToolUseBlock[] = [];
 
-      for (const content of selectTools.content) {
-        if (content.type === "text") {
-          // 通常のテキスト応答の場合
-          finalText.push(content.text);
-          assistantMessageContent.push(content);
-        } else if (content.type === "tool_use") {
-          // ツールコールの場合
-          toolCalls.push(content);
-          assistantMessageContent.push(content);
-        }
+    for (const content of selectTools.content) {
+      if (content.type === "text") {
+        // 通常のテキスト応答の場合
+        finalText.push(content.text);
+        assistantMessageContent.push(content);
+      } else if (content.type === "tool_use") {
+        // ツールコールの場合
+        toolCalls.push(content);
+        assistantMessageContent.push(content);
       }
+    }
 
-      // ツールコールがない場合は終了
-      if (toolCalls.length === 0) {
-        break;
-      }
-
+    // ツールコールがある場合の処理
+    if (toolCalls.length != 0) {
       // ツールコールの結果をメッセージに記録
       formattedMessages.push({
         role: "assistant",
@@ -125,32 +121,34 @@ export async function POST(req: Request) {
             },
           ],
         });
+
+        // ツールコールの結果をLLMに渡す
+        const response = await anthropic.messages.create({
+          model: "claude-3-7-sonnet-latest",
+          max_tokens: 1000,
+          messages: formattedMessages,
+          tools: availableTools,
+        });
+        console.log(
+          "✅ ツールコールの結果:",
+          response.content.map((t) => t.type)
+        );
+
+        finalText.push(
+          ...response.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+        );
+        console.log("✅ 最終ツールコールの結果:", finalText);
+        break;
       }
-
-      // ツールコールの結果をLLMに渡す
-      const response = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-latest",
-        max_tokens: 1000,
-        messages: formattedMessages,
-        tools: availableTools,
-      });
-      console.log(
-        "✅ ツールコールの結果:",
-        response.content.map((t) => t.type)
-      );
-
-      finalText.push(
-        ...response.content.filter((c) => c.type === "text").map((c) => c.text)
-      );
-      console.log("✅ 最終ツールコールの結果:", finalText);
-      break;
     }
 
     /**
      * フェイク用のモデルを使用して、応答を生成
      */
     const fakeModel = new FakeListChatModel({
-      responses: ["（応答結果）"],
+      responses: [finalText.join("\n")],
     });
     const prompt = PromptTemplate.fromTemplate("TEMPLATE1");
     const chain = prompt.pipe(fakeModel);
