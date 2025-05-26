@@ -1,3 +1,4 @@
+import { getModel } from "@/src/contents/utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     /** 悩み相談 */
     const concernsAnswer = await getYesNoResponse(
       currentMessageContent,
-      "悩み相談"
+      "悩みや不安からきている相談"
     );
     console.log("🧠 悩み: " + concernsAnswer);
 
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
     let response = null;
     if (concernsAnswer === "YES") {
       response = await getResult(
-        "http://localhost:3000/api/chat",
+        "http://localhost:3000/api/mentor",
         messages,
         modelName
       );
@@ -94,9 +95,16 @@ export async function POST(req: Request) {
         response ? response.kwargs.content : "悩み相談ではありません。",
       ],
     });
-    const prompt = PromptTemplate.fromTemplate("TEMPLATE1");
-    const chain = prompt.pipe(fakeModel);
-    const stream = await chain.stream({});
+    const prompt = PromptTemplate.fromTemplate(
+      `system: 以下のメッセージを元にユーザーに回答してください。\n\nAI: {ai_input}\nuser: {user_input}\nAI: `
+    );
+    const model = getModel(modelName);
+
+    const chain = prompt.pipe(model);
+    const stream = await chain.stream({
+      ai_input: response ? response.kwargs.content : "悩み相談ではありません。",
+      user_input: currentMessageContent,
+    });
 
     return LangChainAdapter.toDataStreamResponse(stream);
   } catch (error) {

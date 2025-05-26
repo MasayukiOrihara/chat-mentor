@@ -19,11 +19,17 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// 定数
+const PYTHON_PATH = process.cwd() + "/mcp-server/.venv/Scripts/python.exe";
+const ADD_PY_PATH = process.cwd() + "/mcp-server/add.py";
+const SEARCH_PY_PATH = process.cwd() + "/mcp-server/search.py";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const messages = body.messages ?? [];
 
+    /** メッセージ処理 */
     // ユーザーチャットの取得
     const current = messages[messages.length - 1];
     const formattedMessages = [
@@ -39,9 +45,14 @@ export async function POST(req: Request) {
      * 通信処理
      */
     // 通信方法の定義: 今回はPythonのサーバを参照
-    const transport = new StdioClientTransport({
-      command: "C:/localgit/chat-mentor/mcp-server/.venv/Scripts/python.exe",
-      args: ["C:/localgit/chat-mentor/mcp-server/add.py"],
+    const transportAdd = new StdioClientTransport({
+      command: PYTHON_PATH,
+      args: [ADD_PY_PATH],
+    });
+
+    const transportSearch = new StdioClientTransport({
+      command: PYTHON_PATH,
+      args: [SEARCH_PY_PATH],
     });
 
     // Clientの初期化
@@ -49,7 +60,8 @@ export async function POST(req: Request) {
       name: "mcp-client",
       version: "1.0.0",
     });
-    await client.connect(transport);
+    // await client.connect(transportAdd);
+    await client.connect(transportSearch);
 
     /**
      * ツール選定
@@ -110,6 +122,11 @@ export async function POST(req: Request) {
           name: toolCall.name,
           arguments: toolCall.input as { [x: string]: unknown },
         });
+        const keys = Object.keys(toolCall.input as object);
+        const keys2 = Object.keys(result.content as object);
+        console.log("🔨 名前:" + toolCall.name);
+        console.log("🔨 因数:" + keys);
+        console.log("🔨 結果:" + JSON.stringify(result.content));
 
         formattedMessages.push({
           role: "user",
@@ -145,7 +162,7 @@ export async function POST(req: Request) {
     }
 
     /**
-     * フェイク用のモデルを使用して、応答を生成
+     * フェイク用のモデルを使用して、そのまま応答を送信
      */
     const fakeModel = new FakeListChatModel({
       responses: [finalText.join("\n")],
