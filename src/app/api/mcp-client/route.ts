@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
     // anthropicのツール選定
     const selectTools = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-3-5-haiku-latest",
       max_tokens: 1000,
       messages: formattedMessages,
       tools: availableTools,
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
 
         // ツールコールの結果をLLMに渡す
         const response = await anthropic.messages.create({
-          model: "claude-3-7-sonnet-latest",
+          model: "claude-3-5-haiku-latest",
           max_tokens: 1000,
           messages: formattedMessages,
           tools: availableTools,
@@ -152,9 +152,9 @@ export async function POST(req: Request) {
     });
     const prompt = PromptTemplate.fromTemplate("TEMPLATE1");
     const chain = prompt.pipe(fakeModel);
-    const stream = await chain.stream({});
+    const stream = await chain.invoke({});
 
-    return LangChainAdapter.toDataStreamResponse(stream);
+    return new Response(JSON.stringify(stream));
   } catch (error) {
     if (error instanceof Error) {
       console.log(error);
