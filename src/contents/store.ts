@@ -1,6 +1,5 @@
 import { create } from "zustand";
-
-type Model = "gpt-4o" | "claude-haiku" | "fake-llm";
+import { Model } from "./type";
 
 type ModelState = {
   selectedModel: Model;

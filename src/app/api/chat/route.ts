@@ -1,6 +1,6 @@
 import { getModel } from "../../../contents/utils";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { Message as VercelChatMessage, LangChainAdapter } from "ai";
+import { Message as VercelChatMessage } from "ai";
 import { Client } from "langsmith";
 
 // プロンプト取得用クライアント
@@ -19,7 +19,9 @@ export async function POST(req: Request) {
     const messages = body.messages ?? [];
     const modelName = body.model ?? "fake-llm";
 
-    console.log("チャット応答AIのモデル: ", modelName);
+    console.log("💬 通常チャットAPI ");
+    console.log("🧠 モデル: ", modelName);
+    console.log("---");
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {

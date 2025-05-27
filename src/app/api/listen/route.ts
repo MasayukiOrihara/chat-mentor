@@ -1,18 +1,30 @@
+import { Model } from "@/src/contents/type";
 import { getModel } from "@/src/contents/utils";
 import Anthropic from "@anthropic-ai/sdk";
+import { ChatMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { LangChainAdapter } from "ai";
+import { Message as VercelChatMessage, LangChainAdapter } from "ai";
+import { Client } from "langsmith";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+
+const client = new Client({
+  apiKey: process.env.LANGSMITH_API_KEY,
+});
+
+// 相談中のフラグ
+let hasConcerns = false;
+
 /** YES/NO を答えさせる関数 */
 async function getYesNoResponse(question: string, questionType: string) {
   const response = await anthropic.messages.create({
-    model: "claude-3-5-haiku-latest",
+    model: ANTHROPIC_MODEL_3,
     max_tokens: 10,
+    temperature: 0,
     messages: [
       {
         role: "user",
@@ -26,7 +38,11 @@ async function getYesNoResponse(question: string, questionType: string) {
 }
 
 /** APIから結果を取得 */
-async function getResult(api: string, messages: any, modelName: any) {
+async function getResult(
+  api: string,
+  messages: ChatMessage[],
+  modelName: Model
+) {
   const res = await fetch(api, {
     method: "POST",
     headers: {
@@ -49,6 +65,10 @@ export async function POST(req: Request) {
     const modelName = body.model ?? "fake-llm";
 
     /** メッセージ */
+    const formatMessage = (message: VercelChatMessage) => {
+      return `${message.role}: ${message.content}`;
+    };
+    const formattedPreviousMessages = messages.slice(0, -1).map(formatMessage);
     const currentMessageContent = messages[messages.length - 1].content;
 
     /** 悩み相談 */
@@ -56,18 +76,19 @@ export async function POST(req: Request) {
       currentMessageContent,
       "悩みや不安からきている相談"
     );
-    console.log("🧠 悩み: " + concernsAnswer);
+    console.log("💛 悩み: " + concernsAnswer + " フラグ: " + hasConcerns);
 
     /** 指示 */
     const instructionAnswer = await getYesNoResponse(
       currentMessageContent,
-      "AIに対する指示"
+      "AIに対する指示や標準のAIでは解決できない問題"
     );
-    console.log("🧠 指示: " + instructionAnswer);
+    console.log("🔨 指示: " + instructionAnswer);
 
     /** 回答の聞き出し */
     let response = null;
-    if (concernsAnswer === "YES") {
+    if (concernsAnswer === "YES" || hasConcerns) {
+      hasConcerns = true;
       response = await getResult(
         "http://localhost:3000/api/mentor",
         messages,
@@ -79,29 +100,18 @@ export async function POST(req: Request) {
         messages,
         modelName
       );
-    } else {
-      response = await getResult(
-        "http://localhost:3000/api/chat",
-        messages,
-        modelName
-      );
     }
 
-    /**
-     * フェイク用のモデルを使用して、応答を生成
-     */
-    const fakeModel = new FakeListChatModel({
-      responses: [
-        response ? response.kwargs.content : "悩み相談ではありません。",
-      ],
-    });
+    /** 応答を作成 */
+    const chatTemplate = await client.pullPromptCommit("chat-menter-charactor");
     const prompt = PromptTemplate.fromTemplate(
-      `system: 以下のメッセージを元にユーザーに回答してください。\n\nAI: {ai_input}\nuser: {user_input}\nAI: `
+      chatTemplate.manifest.kwargs.template
     );
     const model = getModel(modelName);
 
     const chain = prompt.pipe(model);
     const stream = await chain.stream({
+      chat_history: formattedPreviousMessages.join("\n"),
       ai_input: response ? response.kwargs.content : "悩み相談ではありません。",
       user_input: currentMessageContent,
     });
@@ -109,6 +119,7 @@ export async function POST(req: Request) {
     return LangChainAdapter.toDataStreamResponse(stream);
   } catch (error) {
     if (error instanceof Error) {
+      console.log(error);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },

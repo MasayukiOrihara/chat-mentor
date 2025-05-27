@@ -2,18 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { Message as VercelChatMessage, LangChainAdapter } from "ai";
-import { ChatOpenAI } from "@langchain/openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-
-const openAiModel = new ChatOpenAI({
-  model: "gpt-4o",
-  apiKey: process.env.OPENAI_API_KEY,
-  temperature: 0.8,
-  tags: ["mcp"],
-});
+import { TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -21,7 +11,7 @@ const anthropic = new Anthropic({
 
 // 定数
 const PYTHON_PATH = process.cwd() + "/mcp-server/.venv/Scripts/python.exe";
-const ADD_PY_PATH = process.cwd() + "/mcp-server/add.py";
+//const ADD_PY_PATH = process.cwd() + "/mcp-server/add.py";
 const SEARCH_PY_PATH = process.cwd() + "/mcp-server/search.py";
 
 export async function POST(req: Request) {
@@ -45,10 +35,10 @@ export async function POST(req: Request) {
      * 通信処理
      */
     // 通信方法の定義: 今回はPythonのサーバを参照
-    const transportAdd = new StdioClientTransport({
-      command: PYTHON_PATH,
-      args: [ADD_PY_PATH],
-    });
+    // const transportAdd = new StdioClientTransport({
+    //   command: PYTHON_PATH,
+    //   args: [ADD_PY_PATH],
+    // });
 
     const transportSearch = new StdioClientTransport({
       command: PYTHON_PATH,
@@ -93,7 +83,7 @@ export async function POST(req: Request) {
      * 応答処理とツール・コールの処理
      */
     const finalText: string[] = [];
-    const assistantMessageContent: any[] = [];
+    const assistantMessageContent: ToolUseBlock[] & TextBlock[] = [];
     const toolCalls: ToolUseBlock[] = [];
 
     for (const content of selectTools.content) {
@@ -123,7 +113,6 @@ export async function POST(req: Request) {
           arguments: toolCall.input as { [x: string]: unknown },
         });
         const keys = Object.keys(toolCall.input as object);
-        const keys2 = Object.keys(result.content as object);
         console.log("🔨 名前:" + toolCall.name);
         console.log("🔨 因数:" + keys);
         console.log("🔨 結果:" + JSON.stringify(result.content));

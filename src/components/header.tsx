@@ -1,6 +1,7 @@
 "use client";
 
 import { useModelStore } from "../contents/store";
+import { Model } from "../contents/type";
 import { Button } from "./ui/button";
 
 export const Header: React.FC = () => {
@@ -19,7 +20,7 @@ export const Header: React.FC = () => {
                   ? "bg-blue-500 px-3 py-1 rounded"
                   : "bg-gray-600 px-3 py-1 rounded"
               }
-              onClick={() => selectedSetModel(model as any)}
+              onClick={() => selectedSetModel(model as Model)}
             >
               {model}
             </Button>
