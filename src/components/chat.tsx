@@ -8,14 +8,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { useModelStore } from "../contents/store";
 
-type Model = "gpt-4o" | "claude-haiku" | "fake-llm";
+export const Chat: React.FC = () => {
+  const model = useModelStore((state) => state.selectedModel);
 
-interface ChatProps {
-  model: Model;
-}
-
-export const Chat: React.FC<ChatProps> = ({ model }) => {
   const { messages, input, handleInputChange, handleSubmit, status } = useChat({
     // APIの読み込み
     api: "api/listen",
