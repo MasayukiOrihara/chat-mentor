@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { SendHorizontalIcon } from "lucide-react";
+import { LoaderCircleIcon, LoaderIcon, SendHorizontalIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -16,7 +16,7 @@ interface ChatProps {
 }
 
 export const Chat: React.FC<ChatProps> = ({ model }) => {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, status } = useChat({
     // APIの読み込み
     api: "api/listen",
     body: {
@@ -34,7 +34,7 @@ export const Chat: React.FC<ChatProps> = ({ model }) => {
   }, [messages]);
 
   return (
-    <div className="flex flex-col w-2xl h-full mx-5 gap-2 overflow-hidden">
+    <div className="flex flex-col w-2xl h-full mx-auto gap-2 overflow-hidden">
       <div className="flex flex-col flex-1 overflow-y-auto mb-18">
         {messages.map((message) => (
           <div
@@ -65,23 +65,35 @@ export const Chat: React.FC<ChatProps> = ({ model }) => {
             ))}
           </div>
         ))}
+        {status === "submitted" && (
+          <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-lg mb-2 mx-8">
+            <LoaderCircleIcon className="animate-spin h-6 w-6 text-gray-400" />
+            <span className="text-gray-400">AIくんが 考えています...</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-2xl p-4">
+      <form onSubmit={handleSubmit} className="w-auto max-w-2xl p-4">
         <div className="flex w-full gap-4">
           <Input
             className="bg-zinc-800 w-full p-2 h-12 border border-zinc-700 rounded shadow-xl text-white placeholder:text-neutral-400"
             value={input}
             placeholder="回答をしてください... [ENTER で 改行]"
+            disabled={status === "submitted"}
             onChange={handleInputChange}
           />
 
           <Button
             type="submit"
+            disabled={status === "submitted"}
             className="w-18 h-10 bg-[#00bc7d] text-white p-2 rounded hover:bg-emerald-900 hover:cursor-pointer hover:text-white/40 self-end"
           >
-            <SendHorizontalIcon />
+            {status === "submitted" ? (
+              <LoaderIcon className="animate-spin" />
+            ) : (
+              <SendHorizontalIcon />
+            )}
           </Button>
         </div>
       </form>
