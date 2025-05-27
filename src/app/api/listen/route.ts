@@ -6,6 +6,10 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { Message as VercelChatMessage, LangChainAdapter } from "ai";
 import { Client } from "langsmith";
 
+const baseUrl = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "http://localhost:3000"; // ローカル用
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
@@ -89,14 +93,10 @@ export async function POST(req: Request) {
     let response = null;
     if (concernsAnswer === "YES" || hasConcerns) {
       hasConcerns = true;
-      response = await getResult(
-        "http://localhost:3000/api/mentor",
-        messages,
-        modelName
-      );
+      response = await getResult(baseUrl + "/api/mentor", messages, modelName);
     } else if (instructionAnswer === "YES") {
       response = await getResult(
-        "http://localhost:3000/api/mcp-client",
+        baseUrl + "/api/mcp-client",
         messages,
         modelName
       );
