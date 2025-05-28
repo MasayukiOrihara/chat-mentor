@@ -6,10 +6,6 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { Message as VercelChatMessage, LangChainAdapter } from "ai";
 import { Client } from "langsmith";
 
-const baseUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000"; // ローカル用
-
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
@@ -67,6 +63,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const messages = body.messages ?? [];
     const modelName = body.model ?? "fake-llm";
+
+    // パス
+    const host = req.headers.get("host");
+    const protocol = host?.includes("localhost") ? "http" : "https";
+    const baseUrl = `${protocol}://${host}`;
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {
