@@ -48,6 +48,7 @@ async function getResult(
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
     },
     body: JSON.stringify({ messages, model: modelName }),
   });
