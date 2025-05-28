@@ -62,6 +62,7 @@ async function getResult(
     const text = body.text();
     throw new Error(`API error: ${text || res.statusText}`);
   }
+  console.log("row text: " + body.text());
 
   return body;
 }
