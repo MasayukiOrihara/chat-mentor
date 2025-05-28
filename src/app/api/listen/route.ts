@@ -51,6 +51,7 @@ async function getResult(
     body: JSON.stringify({ messages, model: modelName }),
   });
 
+  console.log("row text: " + res.text());
   const body = await res.json();
   if (!res.ok) {
     const errorBody = body.catch(() => null);
@@ -62,7 +63,6 @@ async function getResult(
     const text = body.text();
     throw new Error(`API error: ${text || res.statusText}`);
   }
-  console.log("row text: " + body.text());
 
   return body;
 }
