@@ -94,7 +94,7 @@ const anthropic = new Anthropic({
 });
 
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
-const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+// const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
 
 // 回答を整形する関数
 function formatAnthropicMessage(
@@ -352,7 +352,7 @@ const MentorAnnotation = Annotation.Root({
     default: () => "",
   }),
   step: Annotation<number>({
-    value: (state: number = 0, action: number) => action,
+    value: (action: number) => action,
     default: () => 0,
   }),
   transition: Annotation<States>({
