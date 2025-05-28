@@ -50,18 +50,20 @@ async function getResult(
     },
     body: JSON.stringify({ messages, model: modelName }),
   });
+
+  const body = await res.json();
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => null);
+    const errorBody = body.catch(() => null);
     if (errorBody && errorBody.message) {
       throw new Error(`API error: ${errorBody.message}`);
     }
 
     // JSONでなければテキストを取得
-    const text = await res.text();
+    const text = body.text();
     throw new Error(`API error: ${text || res.statusText}`);
   }
 
-  return await res.json();
+  return body;
 }
 
 /**
@@ -75,13 +77,12 @@ export async function POST(req: Request) {
     const messages = body.messages ?? [];
     const modelName = body.model ?? "fake-llm";
 
-    console.log(messages);
-    console.log(modelName);
-
     // パス
     const host = req.headers.get("host");
     const protocol = host?.includes("localhost") ? "http" : "https";
     const baseUrl = `${protocol}://${host}`;
+
+    console.log("API: " + baseUrl);
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {
