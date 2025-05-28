@@ -59,15 +59,15 @@ async function getResult(
  * @returns
  */
 export async function POST(req: Request) {
+  // パス
+  const host = req.headers.get("host");
+  const protocol = host?.includes("localhost") ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+
   try {
     const body = await req.json();
     const messages = body.messages ?? [];
     const modelName = body.model ?? "fake-llm";
-
-    // パス
-    const host = req.headers.get("host");
-    const protocol = host?.includes("localhost") ? "http" : "https";
-    const baseUrl = `${protocol}://${host}`;
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {
@@ -120,7 +120,7 @@ export async function POST(req: Request) {
     return LangChainAdapter.toDataStreamResponse(stream);
   } catch (error) {
     if (error instanceof Error) {
-      console.log(error);
+      console.log(error + baseUrl);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
