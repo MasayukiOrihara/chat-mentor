@@ -51,7 +51,12 @@ async function getResult(
     body: JSON.stringify({ messages, model: modelName }),
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
+    const errorBody = await res.json().catch(() => null);
+    if (errorBody && errorBody.message) {
+      throw new Error(`API error: ${errorBody.message}`);
+    }
+
+    throw new Error(`API error: ${res.status} + ${res.text()}`);
   }
 
   return await res.json();
