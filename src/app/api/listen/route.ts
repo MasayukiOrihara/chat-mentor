@@ -56,7 +56,9 @@ async function getResult(
       throw new Error(`API error: ${errorBody.message}`);
     }
 
-    throw new Error(`API error: ${res.status} + ${res.text()}`);
+    // JSONでなければテキストを取得
+    const text = await res.text();
+    throw new Error(`API error: ${text || res.statusText}`);
   }
 
   return await res.json();
@@ -68,11 +70,6 @@ async function getResult(
  * @returns
  */
 export async function POST(req: Request) {
-  // パス
-  const host = req.headers.get("host");
-  const protocol = host?.includes("localhost") ? "http" : "https";
-  const baseUrl = `${protocol}://${host}`;
-
   try {
     const body = await req.json();
     const messages = body.messages ?? [];
@@ -80,6 +77,11 @@ export async function POST(req: Request) {
 
     console.log(messages);
     console.log(modelName);
+
+    // パス
+    const host = body.headers.get("host");
+    const protocol = host?.includes("localhost") ? "http" : "https";
+    const baseUrl = `${protocol}://${host}`;
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {
@@ -132,7 +134,7 @@ export async function POST(req: Request) {
     return LangChainAdapter.toDataStreamResponse(stream);
   } catch (error) {
     if (error instanceof Error) {
-      console.log(error + " " + baseUrl);
+      console.log(error);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
