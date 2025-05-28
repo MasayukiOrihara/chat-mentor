@@ -45,13 +45,13 @@ async function getResult(
 ) {
   const res = await fetch(api, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ messages, model: modelName }),
   });
 
-  console.log("row text: " + (await res.text()));
   const body = await res.json();
   if (!res.ok) {
     const errorBody = body.catch(() => null);
