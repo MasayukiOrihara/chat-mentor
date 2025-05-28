@@ -51,7 +51,7 @@ async function getResult(
     body: JSON.stringify({ messages, model: modelName }),
   });
 
-  console.log("row text: " + res.text());
+  console.log("row text: " + (await res.text()));
   const body = await res.json();
   if (!res.ok) {
     const errorBody = body.catch(() => null);
