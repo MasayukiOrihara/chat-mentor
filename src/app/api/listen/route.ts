@@ -50,6 +50,10 @@ async function getResult(
     },
     body: JSON.stringify({ messages, model: modelName }),
   });
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
   return await res.json();
 }
 
@@ -68,6 +72,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const messages = body.messages ?? [];
     const modelName = body.model ?? "fake-llm";
+
+    console.log(messages);
+    console.log(modelName);
 
     /** メッセージ */
     const formatMessage = (message: VercelChatMessage) => {
@@ -120,7 +127,7 @@ export async function POST(req: Request) {
     return LangChainAdapter.toDataStreamResponse(stream);
   } catch (error) {
     if (error instanceof Error) {
-      console.log(error + baseUrl);
+      console.log(error + " " + baseUrl);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
