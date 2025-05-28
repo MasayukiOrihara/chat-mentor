@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     console.log(modelName);
 
     // パス
-    const host = body.headers.get("host");
+    const host = req.headers.get("host");
     const protocol = host?.includes("localhost") ? "http" : "https";
     const baseUrl = `${protocol}://${host}`;
 
