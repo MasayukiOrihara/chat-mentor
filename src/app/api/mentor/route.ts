@@ -7,10 +7,10 @@ import {
 } from "@langchain/langgraph";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import Anthropic from "@anthropic-ai/sdk";
-import { MessageParam } from "@anthropic-ai/sdk/resources/messages.mjs";
 import { MentorStates, ChecklistItem } from "@/src/contents/type";
-import { loadJsonFile } from "@/src/contents/utils";
+import { loadJsonFile, UserMessage } from "@/src/contents/utils";
 import { Client } from "langsmith";
+import { PromptCommit } from "langsmith/schemas";
 
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
@@ -26,7 +26,6 @@ const transitionStates: MentorStates = {
 
 // 繰り返した回数
 let count = 0;
-
 // チェックリスト
 let checklist: ChecklistItem[][];
 
@@ -60,15 +59,23 @@ function formatAnthropicMessage(
   return textBlock?.text?.trim().toUpperCase() || "";
 }
 
-// 単一メッセージの設定
-const systemMessage = (context: string): MessageParam[] => {
-  return [
-    {
-      role: "user",
-      content: context,
-    },
+/** プロンプトをすべて事前に読み込む（非同期処理） */
+let allPrompt: PromptCommit[];
+async function loadAllPrompts() {
+  // langsmith側のプロンプトの名前
+  const promptnames = [
+    "mentor_check-contenue-talk",
+    "mentor_check-user-message",
+    "mentor_select-next-question",
+    "mentor_summarize-message",
   ];
-};
+  // 読み込み開始
+  const promises = promptnames.map((name) => client.pullPromptCommit(name));
+  // 処理待ち
+  const prompts = await Promise.all(promises);
+
+  return prompts;
+}
 
 /**
  * ノード定義
@@ -88,6 +95,9 @@ async function checkPrevState() {
   if (intStep === 3) {
     transitionStates.hasQuestion = false;
   }
+
+  // プロンプトの読み込み
+  allPrompt = await loadAllPrompts();
 
   return {
     transition: { ...transitionStates },
@@ -133,19 +143,16 @@ async function prepareQuestion({
   console.log("ユーザーの発言: ", userMessage);
 
   // 2. 会話継続の意思を確認
-  const CHECK_CONTENUE_TALK = await client.pullPromptCommit(
-    "mentor_check-contenue-talk"
-  );
-  const promptText1 = CHECK_CONTENUE_TALK.manifest.kwargs.template.replace(
+  const CHECK_CONTENUE_TALK = allPrompt[0].manifest.kwargs.template.replace(
     "{user_message}",
     userMessage
   );
 
   const checkContenueTalk = await anthropic.messages.create({
     model: ANTHROPIC_MODEL_3_5,
-    max_tokens: 5,
+    max_tokens: 2,
     temperature: 0,
-    messages: systemMessage(promptText1),
+    messages: UserMessage(CHECK_CONTENUE_TALK),
   });
   const resContenueTalk = formatAnthropicMessage(checkContenueTalk);
   console.log("会話終了の意思: " + resContenueTalk);
@@ -174,17 +181,15 @@ async function prepareQuestion({
   }
 
   // 4. チェックリストの質問との一致項目を特定
-  const CHECK_USER_MESSAGE = await client.pullPromptCommit(
-    "mentor_check-user-message"
-  );
-  const promptText2 = CHECK_USER_MESSAGE.manifest.kwargs.template
+  const CHECK_USER_MESSAGE = allPrompt[1].manifest.kwargs.template
     .replace("{checklist_text}", checklistAllText)
     .replace("{user_message}", userMessage);
+
   const checkUserMessage = await anthropic.messages.create({
     model: ANTHROPIC_MODEL_3,
     max_tokens: 1000,
     temperature: 0,
-    messages: systemMessage(promptText2),
+    messages: UserMessage(CHECK_USER_MESSAGE),
   });
   const response = formatAnthropicMessage(checkUserMessage);
   console.log("一致項目の回答結果:\n" + response);
@@ -239,10 +244,7 @@ async function addContext({
   }
 
   // どれを質問するかを決めさせる
-  const SELECT_NEXT_QUESTION = await client.pullPromptCommit(
-    "mentor_select-next-question"
-  );
-  const promptText3 = SELECT_NEXT_QUESTION.manifest.kwargs.template
+  const SELECT_NEXT_QUESTION = allPrompt[2].manifest.kwargs.template
     .replace("{checklist_question}", checklistQuestion)
     .replace("{user_message}", userMessage);
 
@@ -250,7 +252,7 @@ async function addContext({
     model: ANTHROPIC_MODEL_3,
     max_tokens: 300,
     temperature: 0.5,
-    messages: systemMessage(promptText3),
+    messages: UserMessage(SELECT_NEXT_QUESTION),
   });
   contexts = formatAnthropicMessage(selectNextQuestion);
   console.log("contexts: " + contexts);
@@ -302,10 +304,7 @@ async function summarizeConversation({
   }
 
   // 2. チェックリストを参考に総括をする
-  const SUMMARIZE_MESSAGE = await client.pullPromptCommit(
-    "mentor_summarize-message"
-  );
-  const promptText4 = SUMMARIZE_MESSAGE.manifest.kwargs.template.replace(
+  const SUMMARIZE_MESSAGE = allPrompt[3].manifest.kwargs.template.replace(
     "{checklist-text}",
     checklistAllText
   );
@@ -314,7 +313,7 @@ async function summarizeConversation({
     model: ANTHROPIC_MODEL_3,
     max_tokens: 500,
     temperature: 0.5,
-    messages: systemMessage(promptText4),
+    messages: UserMessage(SUMMARIZE_MESSAGE),
   });
   contexts =
     CONSULTING_FINISH_MESSAGE + formatAnthropicMessage(summarizeMessage);

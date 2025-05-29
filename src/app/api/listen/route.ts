@@ -2,12 +2,16 @@ import { Model } from "@/src/contents/type";
 import { getModel } from "@/src/contents/utils";
 import Anthropic from "@anthropic-ai/sdk";
 import { ChatMessage } from "@langchain/core/messages";
-import { ParamsFromFString, PromptTemplate } from "@langchain/core/prompts";
+import { PromptTemplate } from "@langchain/core/prompts";
 import { Message as VercelChatMessage, LangChainAdapter } from "ai";
 import { Client } from "langsmith";
+import { UserMessage } from "@/src/contents/utils";
 
 // 定数
-const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
+//const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+const CONCERNS_JUDGE_TEXT = "悩みや不安からきている相談";
+const INSTRUCTION_JUDGE_TEXT = "AIに対する指示や標準のAIでは解決できない問題";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -23,16 +27,17 @@ let wasConcerns = false;
 
 /** YES/NO を答えさせる関数 */
 async function getYesNoResponse(question: string, questionType: string) {
+  const GET_YES_NO_RESPONSE = await client.pullPromptCommit(
+    "listen_get-yes-no-response"
+  );
+  const promptTextResponse = GET_YES_NO_RESPONSE.manifest.kwargs.template
+    .replace("{question}", question)
+    .replace("{question_type}", questionType);
   const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3,
+    model: ANTHROPIC_MODEL_3_5,
     max_tokens: 10,
     temperature: 0,
-    messages: [
-      {
-        role: "user",
-        content: `${question}\nこの文章は ${questionType} ですか？YES または NO のどちらかのみを出力してください。`,
-      },
-    ],
+    messages: UserMessage(promptTextResponse),
   });
 
   const textBlock = response.content.find((block) => block.type === "text");
@@ -98,14 +103,14 @@ export async function POST(req: Request) {
     /** 悩み相談 */
     const concernsAnswer = await getYesNoResponse(
       currentMessageContent,
-      "悩みや不安からきている相談"
+      CONCERNS_JUDGE_TEXT
     );
     console.log("💛 悩み: " + concernsAnswer + " フラグ: " + hasConcerns);
 
     /** 指示 */
     const instructionAnswer = await getYesNoResponse(
       currentMessageContent,
-      "AIに対する指示や標準のAIでは解決できない問題"
+      INSTRUCTION_JUDGE_TEXT
     );
     console.log("🔨 指示: " + instructionAnswer);
 
@@ -130,17 +135,15 @@ export async function POST(req: Request) {
     }
 
     /** 応答を作成 */
-    const chatTemplate = await client.pullPromptCommit("chat-menter-charactor");
-    const concernsFinishTemplate = `system:\n今までの会話と下記のAIのメッセージを参考に、会話が途中でも今までの相談を総括してください。また相談者のこれからについて具体的なアドバイスをしてあげてください。\n\n会話履歴:---\n{chat_history}\n---\n\nAI: {ai_input}\n\nuser: {user_input}\nassistant: `;
+    let chatTemplate = await client.pullPromptCommit("listen_chat-charactor");
+    if (!hasConcerns && wasConcerns) {
+      chatTemplate = await client.pullPromptCommit("listen_mentor-finish");
+      console.log("has: " + hasConcerns + "\n" + "was: " + wasConcerns);
+    }
 
     let prompt = PromptTemplate.fromTemplate(
       chatTemplate.manifest.kwargs.template
     );
-    // お悩み相談がひと段落したらまとめとこれからを述べるようにする？
-    if (!hasConcerns && wasConcerns) {
-      prompt = PromptTemplate.fromTemplate(concernsFinishTemplate);
-      console.log("has: " + hasConcerns + "\n" + "was: " + wasConcerns);
-    }
     const model = getModel(modelName);
 
     const chain = prompt.pipe(model);
