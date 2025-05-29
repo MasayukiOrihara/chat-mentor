@@ -10,25 +10,43 @@ import Anthropic from "@anthropic-ai/sdk";
 import { MessageParam } from "@anthropic-ai/sdk/resources/messages.mjs";
 import { MentorStates, ChecklistItem } from "@/src/contents/type";
 import { loadJsonFile } from "@/src/contents/utils";
+import { Client } from "langsmith";
+
+// 定数
+const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
+const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+const LIST_JSON_PATH = "src/data/checklist.json";
+const CONSULTING_FINISH_MESSAGE = "--相談の終了--\n";
 
 // 遷移の状態保存
 const transitionStates: MentorStates = {
   isConsulting: false, // メンターモードか
-  isFirst: true, // 初回ターンか
   hasQuestion: true, // 質問することがあるか
 };
 
-// 繰り返した回数を保持
+// 繰り返した回数
 let count = 0;
 
+// チェックリスト
 let checklist: ChecklistItem[][];
 
+// 全初期化
+function init() {
+  count = 0;
+  transitionStates.isConsulting = false;
+  transitionStates.hasQuestion = true;
+  checklist = [];
+}
+
+// anthropic をインスタンス化
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
-// const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
+// langsmithからプロンプトの取得
+const client = new Client({
+  apiKey: process.env.LANGSMITH_API_KEY,
+});
 
 // 回答を整形する関数
 function formatAnthropicMessage(
@@ -55,17 +73,17 @@ const systemMessage = (context: string): MessageParam[] => {
 /**
  * ノード定義
  */
-
 /** 前ターンの状態をチェックする初回ノード */
 async function checkPrevState() {
   console.log("🔍 チェック初回ノード");
   console.log("前回の状態: ", transitionStates);
 
-  //　前回の状態を反映
+  //　前回の状態を確認
   console.log("チェックリスト: ", checklist);
 
-  const intStep = Math.floor(count / 2);
-  console.log(`相談を始めて ${count} ターン目です`);
+  const intStep = Math.floor(count / 1);
+  console.log(`相談を始めて ${count} ターン目`);
+  console.log(`現在 STEP ${intStep}`);
 
   if (intStep === 3) {
     transitionStates.hasQuestion = false;
@@ -81,15 +99,13 @@ async function initSetting() {
   /** 初期設定を行うノード */
   console.log("🔧 初期設定ノード");
 
-  count = 0;
+  init(); // 初期化(念のため)
+
+  // 初期設定
   transitionStates.isConsulting = true;
-  transitionStates.isFirst = false;
-  transitionStates.hasQuestion = true;
 
   // チェックリストの準備
-  const readJson = await loadJsonFile<ChecklistItem[][]>(
-    "src/data/checklist.json"
-  );
+  const readJson = await loadJsonFile<ChecklistItem[][]>(LIST_JSON_PATH);
   if (readJson.success) {
     checklist = readJson.data;
   } else {
@@ -117,22 +133,26 @@ async function prepareQuestion({
   console.log("ユーザーの発言: ", userMessage);
 
   // 2. 会話継続の意思を確認
+  const CHECK_CONTENUE_TALK = await client.pullPromptCommit(
+    "mentor_check-contenue-talk"
+  );
+  const promptText1 = CHECK_CONTENUE_TALK.manifest.kwargs.template.replace(
+    "{user_message}",
+    userMessage
+  );
+
   const checkContenueTalk = await anthropic.messages.create({
     model: ANTHROPIC_MODEL_3_5,
     max_tokens: 5,
     temperature: 0,
-    messages: systemMessage(
-      `次のユーザーの発言から、ユーザーの「問題が解決した」もしくは「この会話をやめたがっている」により会話を終了するかどうかを判断してください。\n\n${userMessage}\n\n会話を終了する場合は「YES」と述べ、そうでない場合は「NO」と述べてください。それ以外述べないでください。`
-    ),
+    messages: systemMessage(promptText1),
   });
   const resContenueTalk = formatAnthropicMessage(checkContenueTalk);
   console.log("会話終了の意思: " + resContenueTalk);
 
+  // 継続の意思なしと判断
   if (resContenueTalk.includes("YES")) {
-    contexts = "相談の終了";
-    transitionStates.isConsulting = false;
-    transitionStates.isConsulting = true;
-
+    transitionStates.hasQuestion = false;
     return { contexts, transition: { ...transitionStates } };
   }
 
@@ -154,13 +174,17 @@ async function prepareQuestion({
   }
 
   // 4. チェックリストの質問との一致項目を特定
+  const CHECK_USER_MESSAGE = await client.pullPromptCommit(
+    "mentor_check-user-message"
+  );
+  const promptText2 = CHECK_USER_MESSAGE.manifest.kwargs.template
+    .replace("{checklist_text}", checklistAllText)
+    .replace("{user_message}", userMessage);
   const checkUserMessage = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3_5,
+    model: ANTHROPIC_MODEL_3,
     max_tokens: 1000,
     temperature: 0,
-    messages: systemMessage(
-      `次のチェックリスト項目に対して、ユーザーの発言が「question: 」の答えになっているかどうかを判断してください。\n\n${checklistAllText}\n\nユーザーの発言: ${userMessage}\n\n関連している場合は「comment: 」に質問の答えとなる該当部分のみ抜き出して記述してください。また「comment: 」の変更をした場合は「checked: 」をtrueにしてください。出力はチェックリストのフォーマット通りとします。理由などの記述はいりません。`
-    ),
+    messages: systemMessage(promptText2),
   });
   const response = formatAnthropicMessage(checkUserMessage);
   console.log("一致項目の回答結果:\n" + response);
@@ -209,19 +233,24 @@ async function addContext({
   console.log("ユーザーの発言: ", userMessage);
 
   // AIに次の質問を渡す用として整形
-  let checkListQuestion = "";
+  let checklistQuestion = "";
   for (const item of checklist[step]) {
-    checkListQuestion += "・" + item.question + "\n";
+    checklistQuestion += "・" + item.question + "\n";
   }
 
   // どれを質問するかを決めさせる
+  const SELECT_NEXT_QUESTION = await client.pullPromptCommit(
+    "mentor_select-next-question"
+  );
+  const promptText3 = SELECT_NEXT_QUESTION.manifest.kwargs.template
+    .replace("{checklist_question}", checklistQuestion)
+    .replace("{user_message}", userMessage);
+
   const selectNextQuestion = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3_5,
+    model: ANTHROPIC_MODEL_3,
     max_tokens: 300,
     temperature: 0.5,
-    messages: systemMessage(
-      `次のチェックリスト項目に対して、もしあなたがメンターだったらユーザーの発言を深堀するならどの質問をするか1つだけ選んでください。\n\n${checkListQuestion}\n\nユーザーの発言: ${userMessage}\n\n深堀する必要がないと判断した場合は「必要なし」と述べてください。理由はいりません。`
-    ),
+    messages: systemMessage(promptText3),
   });
   contexts = formatAnthropicMessage(selectNextQuestion);
   console.log("contexts: " + contexts);
@@ -230,11 +259,14 @@ async function addContext({
 }
 
 /** 送信データを加工するノード */
-async function buildSendData({ contexts }: typeof MentorAnnotation.State) {
+async function buildSendData({
+  messages,
+  contexts,
+}: typeof MentorAnnotation.State) {
   console.log("📤 送信データ加工ノード");
 
   // contextsを出力
-  return { messages: [new AIMessage(contexts)] };
+  return { messages: [...messages, new AIMessage(contexts)] };
 }
 
 /** データを保存するノード */
@@ -244,8 +276,6 @@ async function saveData() {
   // チェックリストをJSON形式で保存したい場合はここへ
   // 終了処理もここ
   count++;
-
-  // console.log("チェックリストの状態: \n", checklist);
 }
 
 /** 質問が終了して今回の話を総括するノード */
@@ -272,16 +302,26 @@ async function summarizeConversation({
   }
 
   // 2. チェックリストを参考に総括をする
+  const SUMMARIZE_MESSAGE = await client.pullPromptCommit(
+    "mentor_summarize-message"
+  );
+  const promptText4 = SUMMARIZE_MESSAGE.manifest.kwargs.template.replace(
+    "{checklist-text}",
+    checklistAllText
+  );
+
   const summarizeMessage = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3_5,
-    max_tokens: 1000,
-    temperature: 0,
-    messages: systemMessage(
-      `次のチェックリストに対して、総括として今回の相談内容をまとめてください。またユーザーに対してアドバイスを行い、これから行うべき行動を指示してください。\n\n${checklistAllText}`
-    ),
+    model: ANTHROPIC_MODEL_3,
+    max_tokens: 500,
+    temperature: 0.5,
+    messages: systemMessage(promptText4),
   });
-  contexts = formatAnthropicMessage(summarizeMessage);
+  contexts =
+    CONSULTING_FINISH_MESSAGE + formatAnthropicMessage(summarizeMessage);
   console.log("総括:\n" + contexts);
+
+  // 初期化
+  init();
 
   return { contexts };
 }
@@ -306,7 +346,6 @@ const MentorAnnotation = Annotation.Root({
     value: (
       state: MentorStates = {
         isConsulting: false,
-        isFirst: true,
         hasQuestion: true,
       },
       action: Partial<MentorStates>
@@ -327,17 +366,15 @@ const MentorGraph = new StateGraph(MentorAnnotation)
   .addNode("summary", summarizeConversation)
   .addEdge("__start__", "check")
   .addConditionalEdges("check", (state) =>
-    state.transition.isFirst ? "init" : "prepare"
+    state.transition.isConsulting ? "prepare" : "init"
   )
   .addEdge("init", "prepare")
-  .addConditionalEdges("prepare", (state) => {
-    if (!state.transition.hasQuestion) return "summary";
-    if (state.transition.isConsulting) return "context";
-    return "build";
-  })
+  .addConditionalEdges("prepare", (state) =>
+    state.transition.hasQuestion ? "context" : "summary"
+  )
   .addEdge("context", "build")
+  .addEdge("summary", "build")
   .addEdge("build", "save")
-  .addEdge("summary", "save")
   .addEdge("save", "__end__")
   .compile();
 
@@ -364,7 +401,7 @@ export async function POST(req: Request) {
       messages: [new HumanMessage(currentMessageContent)],
     });
 
-    const text = result.messages.map((msg) => msg.content).join("\n");
+    const text = result.messages[result.messages.length - 1].content.toString();
     console.log("📈 LangGraph: \n" + text);
 
     /**
@@ -381,6 +418,7 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify(fakeStream));
   } catch (error) {
     if (error instanceof Error) {
+      console.error("API 500 error: " + error);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json" },

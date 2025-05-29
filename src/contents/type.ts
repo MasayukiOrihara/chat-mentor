@@ -46,7 +46,6 @@ export type Model = "gpt-4o" | "claude-haiku" | "fake-llm";
 /** mentorAPIでの状態定義 */
 export type MentorStates = {
   isConsulting: boolean;
-  isFirst: boolean;
   hasQuestion: boolean;
 };
 
