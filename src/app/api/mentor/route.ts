@@ -8,86 +8,20 @@ import {
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import Anthropic from "@anthropic-ai/sdk";
 import { MessageParam } from "@anthropic-ai/sdk/resources/messages.mjs";
+import { MentorStates, ChecklistItem } from "@/src/contents/type";
+import { loadJsonFile } from "@/src/contents/utils";
 
-// 遷移の状態を定義
-type States = {
-  isConsulting: boolean;
-  isFirst: boolean;
-  hasQuestion: boolean;
-};
-const transitionStates: States = {
+// 遷移の状態保存
+const transitionStates: MentorStates = {
   isConsulting: false, // メンターモードか
   isFirst: true, // 初回ターンか
   hasQuestion: true, // 質問することがあるか
 };
 
-type ChecklistItem = {
-  question: string; // 項目名
-  checked: boolean; // チェック状態
-  comment?: string; // 任意の補足コメント
-};
-
 // 繰り返した回数を保持
 let count = 0;
 
-const checklist: ChecklistItem[][] = [
-  [
-    {
-      question: "具体的にどんなことがあった？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "いつからその問題がある？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "関わっている人は誰？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "どこで起きた？",
-      checked: false,
-      comment: "",
-    },
-  ],
-  [
-    {
-      question: "その時どんな気持ちだった？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "今はどう感じてる？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "一番引っかかっていることは何？",
-      checked: false,
-      comment: "",
-    },
-  ],
-  [
-    {
-      question: "どうしたいと思っている？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "他にどんな選択肢があると思う？",
-      checked: false,
-      comment: "",
-    },
-    {
-      question: "今すぐできそうなことは何？",
-      checked: false,
-      comment: "",
-    },
-  ],
-];
+let checklist: ChecklistItem[][];
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -151,6 +85,19 @@ async function initSetting() {
   transitionStates.isConsulting = true;
   transitionStates.isFirst = false;
   transitionStates.hasQuestion = true;
+
+  // チェックリストの準備
+  const readJson = await loadJsonFile<ChecklistItem[][]>(
+    "src/data/checklist.json"
+  );
+  if (readJson.success) {
+    checklist = readJson.data;
+  } else {
+    return new Response(JSON.stringify({ error: readJson.error }), {
+      status: 500,
+      headers: { "Content-type": "application/json" },
+    });
+  }
 
   return {
     transition: { ...transitionStates },
@@ -355,14 +302,14 @@ const MentorAnnotation = Annotation.Root({
     value: (action: number) => action,
     default: () => 0,
   }),
-  transition: Annotation<States>({
+  transition: Annotation<MentorStates>({
     value: (
-      state: States = {
+      state: MentorStates = {
         isConsulting: false,
         isFirst: true,
         hasQuestion: true,
       },
-      action: Partial<States>
+      action: Partial<MentorStates>
     ) => ({
       ...state,
       ...action,

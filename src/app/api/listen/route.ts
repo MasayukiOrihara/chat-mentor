@@ -55,7 +55,6 @@ async function getResult(
 
   const body = await res.json();
   if (!res.ok) {
-    console.log(body);
     const errorBody = body.catch(() => null);
     if (errorBody && errorBody.message) {
       throw new Error(`API error: ${errorBody.message}`);

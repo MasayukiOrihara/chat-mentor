@@ -40,5 +40,19 @@ export type Flags = {
   function: boolean;
   quality: boolean;
 };
-
+/** モデル名 */
 export type Model = "gpt-4o" | "claude-haiku" | "fake-llm";
+
+/** mentorAPIでの状態定義 */
+export type MentorStates = {
+  isConsulting: boolean;
+  isFirst: boolean;
+  hasQuestion: boolean;
+};
+
+// チェックリストの型
+export type ChecklistItem = {
+  question: string; // 項目名
+  checked: boolean; // チェック状態
+  comment?: string; // 任意の補足コメント
+};
