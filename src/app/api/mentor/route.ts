@@ -14,6 +14,8 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import path from "path";
 
+import ckecklist from "@/src/data/checklist.json";
+
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
 const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
@@ -29,13 +31,13 @@ const transitionStates: MentorStates = {
 // 繰り返した回数
 let count = 0;
 // チェックリスト
-let checklist: ChecklistItem[][];
+let checklistJson: ChecklistItem[][];
 // 全初期化
 function init() {
   count = 0;
   transitionStates.isConsulting = false;
   transitionStates.hasQuestion = true;
-  checklist = [];
+  checklistJson = [];
 }
 
 // anthropic(haiku-3)(langchain経由)
@@ -90,7 +92,7 @@ async function checkPrevState() {
   console.log("前回の状態: ", transitionStates);
 
   //　前回の状態を確認
-  console.log("チェックリスト: ", checklist);
+  console.log("チェックリスト: ", checklistJson);
 
   const intStep = Math.floor(count / 1);
   console.log(`相談を始めて ${count} ターン目`);
@@ -119,20 +121,7 @@ async function initSetting() {
   transitionStates.isConsulting = true;
 
   // チェックリストの準備
-  const filePath = path.join("public", LIST_JSON_PATH);
-  // if (path.resolve() === path.resolve("C:/localgit/chat-mentor")) {
-  //   filePath = path.join("public", LIST_JSON_PATH);
-  // }
-  console.log("URL チェック: " + process.cwd() + filePath);
-  const readJson = await loadJsonFile<ChecklistItem[][]>(filePath);
-  if (readJson.success) {
-    checklist = readJson.data;
-  } else {
-    return new Response(JSON.stringify({ error: readJson.error }), {
-      status: 500,
-      headers: { "Content-type": "application/json" },
-    });
-  }
+  checklistJson = ckecklist;
 
   return {
     transition: { ...transitionStates },
@@ -168,7 +157,7 @@ async function prepareQuestion({
 
   // 3. チェックリストをプロンプト用のテキストに整形
   let checklistAllText = "";
-  for (const subList of checklist) {
+  for (const subList of checklistJson) {
     for (const item of subList) {
       checklistAllText +=
         "question: " +
@@ -203,7 +192,7 @@ async function prepareQuestion({
       .map((calam) => calam.trim())
       .filter(Boolean);
 
-    for (const group of checklist) {
+    for (const group of checklistJson) {
       for (const item of group) {
         if (calams[0]?.includes(item.question)) {
           item.checked = calams[1]?.toLowerCase().includes("true") ?? false;
@@ -236,7 +225,7 @@ async function addContext({
 
   // AIに次の質問を渡す用として整形
   let checklistQuestion = "";
-  for (const item of checklist[step]) {
+  for (const item of checklistJson[step]) {
     checklistQuestion += "・" + item.question + "\n";
   }
 
@@ -285,7 +274,7 @@ async function summarizeConversation({
 
   // 1. チェックリストをテキストに変換
   let checklistAllText = "";
-  for (const subList of checklist) {
+  for (const subList of checklistJson) {
     for (const item of subList) {
       checklistAllText +=
         "question: " +
