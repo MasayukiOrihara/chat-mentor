@@ -6,18 +6,18 @@ import {
   StateGraph,
 } from "@langchain/langgraph";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
-import Anthropic from "@anthropic-ai/sdk";
 import { MentorStates, ChecklistItem } from "@/src/contents/type";
 import { loadJsonFile } from "@/src/contents/utils";
 import { Client } from "langsmith";
 import { PromptCommit } from "langsmith/schemas";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { StringOutputParser } from "@langchain/core/output_parsers";
+import path from "path";
 
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
 const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
-const LIST_JSON_PATH = "src/data/checklist.json";
+// const LIST_JSON_PATH = "/public/checklist.json";
 const CONSULTING_FINISH_MESSAGE = "--相談の終了--\n";
 
 // 遷移の状態保存
@@ -54,11 +54,6 @@ const haiku3_5 = new ChatAnthropic({
 });
 // パサー
 const stringParser = new StringOutputParser();
-
-// anthropic をインスタンス化
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
 
 // langsmithからプロンプトの取得
 const client = new Client({
@@ -124,7 +119,9 @@ async function initSetting() {
   transitionStates.isConsulting = true;
 
   // チェックリストの準備
-  const readJson = await loadJsonFile<ChecklistItem[][]>(LIST_JSON_PATH);
+  const filePath = path.join("public", "checklist.json");
+  console.log("URL チェック: " + filePath);
+  const readJson = await loadJsonFile<ChecklistItem[][]>(filePath);
   if (readJson.success) {
     checklist = readJson.data;
   } else {

@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       console.log("has: " + hasConcerns + "\n" + "was: " + wasConcerns);
     }
 
-    let prompt = PromptTemplate.fromTemplate(
+    const prompt = PromptTemplate.fromTemplate(
       chatTemplate.manifest.kwargs.template
     );
     const model = getModel(modelName);
