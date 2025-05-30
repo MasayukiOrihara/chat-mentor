@@ -12,8 +12,6 @@ import { PromptCommit } from "langsmith/schemas";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 
-import ckecklist from "@/src/data/checklist.json";
-
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
 const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
@@ -28,13 +26,69 @@ const transitionStates: MentorStates = {
 // 繰り返した回数
 let count = 0;
 // チェックリスト
-let checklistJson: ChecklistItem[][];
+const checklistJson: ChecklistItem[][] = [
+  [
+    {
+      question: "具体的にどんなことがあった？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "いつからその問題がある？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "関わっている人は誰？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "どこで起きた？",
+      checked: false,
+      comment: "",
+    },
+  ],
+  [
+    {
+      question: "その時どんな気持ちだった？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "今はどう感じてる？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "一番引っかかっていることは何？",
+      checked: false,
+      comment: "",
+    },
+  ],
+  [
+    {
+      question: "どうしたいと思っている？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "他にどんな選択肢があると思う？",
+      checked: false,
+      comment: "",
+    },
+    {
+      question: "今すぐできそうなことは何？",
+      checked: false,
+      comment: "",
+    },
+  ],
+];
 // 全初期化
 function init() {
   count = 0;
   transitionStates.isConsulting = false;
   transitionStates.hasQuestion = true;
-  checklistJson = [];
 }
 
 // anthropic(haiku-3)(langchain経由)
@@ -116,9 +170,6 @@ async function initSetting() {
 
   // 初期設定
   transitionStates.isConsulting = true;
-
-  // チェックリストの準備
-  checklistJson = ckecklist;
 
   return {
     transition: { ...transitionStates },
