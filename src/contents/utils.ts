@@ -149,12 +149,14 @@ export function getModel(modelName: string) {
         apiKey: process.env.OPENAI_API_KEY!,
         model: "gpt-4o",
         temperature: 0.7, // ランダム度（高いほど創造的）
+        cache: true,
       });
       break;
     case "claude-haiku":
       model = new ChatAnthropic({
         model: "claude-3-5-haiku-20241022",
         temperature: 0.7, // ランダム度（高いほど創造的）
+        cache: true,
       });
       break;
     default:

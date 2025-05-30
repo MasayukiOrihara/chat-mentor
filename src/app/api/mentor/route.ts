@@ -8,9 +8,11 @@ import {
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import Anthropic from "@anthropic-ai/sdk";
 import { MentorStates, ChecklistItem } from "@/src/contents/type";
-import { loadJsonFile, UserMessage } from "@/src/contents/utils";
+import { loadJsonFile } from "@/src/contents/utils";
 import { Client } from "langsmith";
 import { PromptCommit } from "langsmith/schemas";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
@@ -28,7 +30,6 @@ const transitionStates: MentorStates = {
 let count = 0;
 // チェックリスト
 let checklist: ChecklistItem[][];
-
 // 全初期化
 function init() {
   count = 0;
@@ -36,6 +37,23 @@ function init() {
   transitionStates.hasQuestion = true;
   checklist = [];
 }
+
+// anthropic(haiku-3)(langchain経由)
+const haiku3 = new ChatAnthropic({
+  model: ANTHROPIC_MODEL_3,
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  maxTokens: 512,
+  temperature: 0.3,
+});
+// anthropic(haiku-3.5)(langchain経由)
+const haiku3_5 = new ChatAnthropic({
+  model: ANTHROPIC_MODEL_3_5,
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  maxTokens: 5,
+  temperature: 0,
+});
+// パサー
+const stringParser = new StringOutputParser();
 
 // anthropic をインスタンス化
 const anthropic = new Anthropic({
@@ -46,18 +64,6 @@ const anthropic = new Anthropic({
 const client = new Client({
   apiKey: process.env.LANGSMITH_API_KEY,
 });
-
-// 回答を整形する関数
-function formatAnthropicMessage(
-  anthropicMessage: Anthropic.Messages.Message & {
-    _request_id?: string | null;
-  }
-) {
-  const textBlock = anthropicMessage.content.find(
-    (block) => block.type === "text"
-  );
-  return textBlock?.text?.trim().toUpperCase() || "";
-}
 
 /** プロンプトをすべて事前に読み込む（非同期処理） */
 let allPrompt: PromptCommit[];
@@ -72,7 +78,10 @@ async function loadAllPrompts() {
   // 読み込み開始
   const promises = promptnames.map((name) => client.pullPromptCommit(name));
   // 処理待ち
-  const prompts = await Promise.all(promises);
+  const results = await Promise.all(promises);
+  const prompts = results.filter(
+    (prompt): prompt is NonNullable<typeof prompt> => prompt !== null
+  );
 
   return prompts;
 }
@@ -142,23 +151,17 @@ async function prepareQuestion({
   const userMessage = messages[messages.length - 1].content;
   console.log("ユーザーの発言: ", userMessage);
 
-  // 2. 会話継続の意思を確認
-  const CHECK_CONTENUE_TALK = allPrompt[0].manifest.kwargs.template.replace(
-    "{user_message}",
-    userMessage
-  );
+  // // 2. 会話継続の意思を確認
+  const contenueTemplate = allPrompt[0].manifest.kwargs.template;
+  const checkContenueTalk = await PromptTemplate.fromTemplate(contenueTemplate)
+    .pipe(haiku3_5)
+    .pipe(stringParser)
+    .invoke({ user_message: userMessage });
 
-  const checkContenueTalk = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3_5,
-    max_tokens: 2,
-    temperature: 0,
-    messages: UserMessage(CHECK_CONTENUE_TALK),
-  });
-  const resContenueTalk = formatAnthropicMessage(checkContenueTalk);
-  console.log("会話終了の意思: " + resContenueTalk);
+  console.log("会話終了の意思: " + checkContenueTalk);
 
   // 継続の意思なしと判断
-  if (resContenueTalk.includes("YES")) {
+  if (checkContenueTalk.includes("YES")) {
     transitionStates.hasQuestion = false;
     return { contexts, transition: { ...transitionStates } };
   }
@@ -181,21 +184,15 @@ async function prepareQuestion({
   }
 
   // 4. チェックリストの質問との一致項目を特定
-  const CHECK_USER_MESSAGE = allPrompt[1].manifest.kwargs.template
-    .replace("{checklist_text}", checklistAllText)
-    .replace("{user_message}", userMessage);
-
-  const checkUserMessage = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3,
-    max_tokens: 1000,
-    temperature: 0,
-    messages: UserMessage(CHECK_USER_MESSAGE),
-  });
-  const response = formatAnthropicMessage(checkUserMessage);
-  console.log("一致項目の回答結果:\n" + response);
+  const userTemplate = allPrompt[1].manifest.kwargs.template;
+  const checkUserMessage = await PromptTemplate.fromTemplate(userTemplate)
+    .pipe(haiku3)
+    .pipe(stringParser)
+    .invoke({ checklist_text: checklistAllText, user_message: userMessage });
+  console.log("一致項目の回答結果:\n" + checkUserMessage);
 
   // 5. JSONに戻す ※ anthropicくんの機嫌で崩れたフォーマット送ってくる可能性もあるからフォーマットチェックはした方がいい
-  const blocks = response
+  const blocks = checkUserMessage
     .split("---")
     .map((block) => block.trim())
     .filter(Boolean);
@@ -244,17 +241,17 @@ async function addContext({
   }
 
   // どれを質問するかを決めさせる
-  const SELECT_NEXT_QUESTION = allPrompt[2].manifest.kwargs.template
-    .replace("{checklist_question}", checklistQuestion)
-    .replace("{user_message}", userMessage);
+  const selectTemplate = allPrompt[2].manifest.kwargs.template;
+  const selectNextQuestion = await PromptTemplate.fromTemplate(selectTemplate)
+    .pipe(haiku3)
+    .pipe(stringParser)
+    .invoke({
+      checklist_question: checklistQuestion,
+      user_message: userMessage,
+    });
+  console.log("一致項目の回答結果:\n" + selectNextQuestion);
 
-  const selectNextQuestion = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3,
-    max_tokens: 300,
-    temperature: 0.5,
-    messages: UserMessage(SELECT_NEXT_QUESTION),
-  });
-  contexts = formatAnthropicMessage(selectNextQuestion);
+  contexts = selectNextQuestion;
   console.log("contexts: " + contexts);
 
   return { contexts };
@@ -304,19 +301,13 @@ async function summarizeConversation({
   }
 
   // 2. チェックリストを参考に総括をする
-  const SUMMARIZE_MESSAGE = allPrompt[3].manifest.kwargs.template.replace(
-    "{checklist-text}",
-    checklistAllText
-  );
+  const summarizeTemplate = allPrompt[3].manifest.kwargs.template;
+  const summarizeMessage = await PromptTemplate.fromTemplate(summarizeTemplate)
+    .pipe(haiku3)
+    .pipe(stringParser)
+    .invoke({ checklist_text: checklistAllText });
 
-  const summarizeMessage = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL_3,
-    max_tokens: 500,
-    temperature: 0.5,
-    messages: UserMessage(SUMMARIZE_MESSAGE),
-  });
-  contexts =
-    CONSULTING_FINISH_MESSAGE + formatAnthropicMessage(summarizeMessage);
+  contexts = CONSULTING_FINISH_MESSAGE + summarizeMessage;
   console.log("総括:\n" + contexts);
 
   // 初期化

@@ -35,7 +35,7 @@ async function getYesNoResponse(question: string, questionType: string) {
     .replace("{question_type}", questionType);
   const response = await anthropic.messages.create({
     model: ANTHROPIC_MODEL_3_5,
-    max_tokens: 10,
+    max_tokens: 2,
     temperature: 0,
     messages: UserMessage(promptTextResponse),
   });
