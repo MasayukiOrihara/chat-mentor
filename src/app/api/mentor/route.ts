@@ -17,7 +17,7 @@ import path from "path";
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
 const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
-// const LIST_JSON_PATH = "/public/checklist.json";
+const LIST_JSON_PATH = "checklist.json";
 const CONSULTING_FINISH_MESSAGE = "--相談の終了--\n";
 
 // 遷移の状態保存
@@ -119,8 +119,11 @@ async function initSetting() {
   transitionStates.isConsulting = true;
 
   // チェックリストの準備
-  const filePath = path.join("public", "checklist.json");
-  console.log("URL チェック: " + filePath);
+  let filePath = path.join("/", LIST_JSON_PATH);
+  if (path.resolve() === path.resolve("C:/localgit/chat-mentor")) {
+    filePath = path.join("/public/", LIST_JSON_PATH);
+  }
+  console.log("URL チェック: " + process.cwd() + filePath);
   const readJson = await loadJsonFile<ChecklistItem[][]>(filePath);
   if (readJson.success) {
     checklist = readJson.data;
