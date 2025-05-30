@@ -119,10 +119,10 @@ async function initSetting() {
   transitionStates.isConsulting = true;
 
   // チェックリストの準備
-  let filePath = path.join("/", LIST_JSON_PATH);
-  if (path.resolve() === path.resolve("C:/localgit/chat-mentor")) {
-    filePath = path.join("/public/", LIST_JSON_PATH);
-  }
+  const filePath = path.join("public", LIST_JSON_PATH);
+  // if (path.resolve() === path.resolve("C:/localgit/chat-mentor")) {
+  //   filePath = path.join("public", LIST_JSON_PATH);
+  // }
   console.log("URL チェック: " + process.cwd() + filePath);
   const readJson = await loadJsonFile<ChecklistItem[][]>(filePath);
   if (readJson.success) {
