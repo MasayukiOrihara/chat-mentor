@@ -7,19 +7,16 @@ import {
 } from "@langchain/langgraph";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { MentorStates, ChecklistItem } from "@/src/contents/type";
-import { loadJsonFile } from "@/src/contents/utils";
 import { Client } from "langsmith";
 import { PromptCommit } from "langsmith/schemas";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { StringOutputParser } from "@langchain/core/output_parsers";
-import path from "path";
 
 import ckecklist from "@/src/data/checklist.json";
 
 // 定数
 const ANTHROPIC_MODEL_3_5 = "claude-3-5-haiku-20241022";
 const ANTHROPIC_MODEL_3 = "claude-3-haiku-20240307";
-const LIST_JSON_PATH = "checklist.json";
 const CONSULTING_FINISH_MESSAGE = "--相談の終了--\n";
 
 // 遷移の状態保存
